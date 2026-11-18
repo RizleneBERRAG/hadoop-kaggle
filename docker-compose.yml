@@ -1,5 +1,5 @@
 x-hadoop-common: &hadoop-common
-  image: local/bigdata-hadoop:3.3.6
+  image: local/bigdata-hadoop:3.5.0
   user: "0:0"
   environment:
     HADOOP_HEAPSIZE_MAX: "512m"
@@ -30,7 +30,11 @@ services:
         echo '=== Formatage initial du NameNode ===' &&
         hdfs namenode -format -force -nonInteractive;
       fi &&
-      hdfs namenode
+      if grep -q 'layoutVersion=-66' /data/hdfs/namenode/current/VERSION 2>/dev/null; then
+        echo '=== Migration automatique du volume HDFS vers Hadoop 3.5 (-upgrade) ===' &&
+        exec hdfs namenode -upgrade;
+      fi &&
+      exec hdfs namenode
       "
     healthcheck:
       test: ["CMD-SHELL", "bash -c '</dev/tcp/localhost/9000 && </dev/tcp/localhost/9870'"]
@@ -99,10 +103,12 @@ services:
       - ./config/hdfs-site.xml:/opt/hadoop/etc/hadoop/hdfs-site.xml:ro
     command: >
       bash -c "
-      hdfs dfsadmin -safemode wait &&
-      hdfs dfs -mkdir -p /lakehouse/bronze /lakehouse/silver /lakehouse/gold /lakehouse/warehouse &&
-      hdfs dfs -chmod -R 777 /lakehouse &&
-      echo '=== Dossiers /lakehouse/{bronze,silver,gold} prêts sur HDFS ==='
+      hdfs dfs -test -d /lakehouse/warehouse || (
+        hdfs dfsadmin -safemode wait &&
+        hdfs dfs -mkdir -p /lakehouse/bronze /lakehouse/silver /lakehouse/gold /lakehouse/warehouse &&
+        hdfs dfs -chmod -R 777 /lakehouse &&
+        echo '=== Dossiers /lakehouse/{bronze,silver,gold} prêts sur HDFS ==='
+      )
       "
     restart: "no"
 
@@ -123,7 +129,7 @@ services:
       - "4040:4040" # Spark Web UI (DAG, Stages, Shuffle — actif quand une session tourne)
     volumes:
       - .:/workspace
-      - ./config/spark-defaults.conf:/usr/local/lib/python3.11/site-packages/pyspark/conf/spark-defaults.conf:ro
+      - ./config/spark-defaults.conf:/opt/spark/conf/spark-defaults.conf:ro
     command: >
       jupyter lab
       --ip=0.0.0.0
@@ -152,7 +158,7 @@ services:
       - "8501:8501" # Interface Dashboard Streamlit
     volumes:
       - ./app:/workspace/app
-      - ./config/spark-defaults.conf:/usr/local/lib/python3.11/site-packages/pyspark/conf/spark-defaults.conf:ro
+      - ./config/spark-defaults.conf:/opt/spark/conf/spark-defaults.conf:ro
     command: >
       streamlit run /workspace/app/dashboard.py
       --server.address=0.0.0.0

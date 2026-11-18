@@ -1,9 +1,10 @@
-FROM eclipse-temurin:11-jre-jammy
+FROM ubuntu:26.04
 
 ARG TARGETARCH
-ARG HADOOP_VERSION=3.3.6
+ARG HADOOP_VERSION=3.5.0
 
 ENV DEBIAN_FRONTEND=noninteractive \
+    JAVA_HOME=/usr/lib/jvm/java-17 \
     HADOOP_HOME=/opt/hadoop \
     HADOOP_CONF_DIR=/opt/hadoop/etc/hadoop \
     HADOOP_COMMON_LIB_NATIVE_DIR=/opt/hadoop/lib/native \
@@ -14,10 +15,11 @@ ENV DEBIAN_FRONTEND=noninteractive \
     HDFS_SECONDARYNAMENODE_USER=root \
     YARN_RESOURCEMANAGER_USER=root \
     YARN_NODEMANAGER_USER=root \
-    PATH="/opt/hadoop/bin:/opt/hadoop/sbin:${PATH}"
+    PATH="/opt/hadoop/bin:/opt/hadoop/sbin:/usr/lib/jvm/java-17/bin:${PATH}"
 
 RUN set -eux; \
     apt-get update && apt-get install -y --no-install-recommends \
+        openjdk-17-jre-headless \
         ca-certificates \
         curl \
         procps \
@@ -28,6 +30,7 @@ RUN set -eux; \
         libzstd1 \
         liblz4-1 \
     && rm -rf /var/lib/apt/lists/*; \
+    ln -snf "/usr/lib/jvm/java-17-openjdk-$(dpkg --print-architecture)" /usr/lib/jvm/java-17; \
     ARCH="${TARGETARCH:-$(uname -m)}"; \
     case "$ARCH" in \
         amd64|x86_64) HADOOP_ARCH="" ;; \
